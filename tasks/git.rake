@@ -7,7 +7,7 @@ end
 namespace :git do
   desc "display git status"
   task :st do
-    sh "git status"
+    system "git status"
   end
 
   desc "add files to git index"
