@@ -1,5 +1,6 @@
-class CommitMessage
+require File.expand_path(File.dirname(__FILE__) + '/prompt_line')
 
+class CommitMessage
   attr_reader :pair, :feature, :message
 
   def initialize
