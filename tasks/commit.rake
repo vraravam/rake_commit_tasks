@@ -20,7 +20,7 @@ namespace :scm do
           Rake::Task['git:push'].invoke   # remote push
         end
       else
-        puts "Nothing to commit" 
+        puts "Nothing to commit"
       end
     end
   end
@@ -40,7 +40,7 @@ namespace :scm do
           SvnHelper.merge_to_trunk(revision) if self.class.const_defined?(:PATH_TO_TRUNK_WORKING_COPY) && `svn info`.include?("branches")
         end
       else
-        puts "Nothing to commit" 
+        puts "Nothing to commit"
       end
     end
   end

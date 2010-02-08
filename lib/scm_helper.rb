@@ -50,4 +50,26 @@ module SvnHelper
   def self.files_to_check_in?
     %x[svn st --ignore-externals].split("\n").reject {|line| line[0, 1] == "X"}.any?
   end
+
+  def self.merge_to_trunk(revision)
+    puts "Merging changes into trunk. Don't forget to check these in."
+    sh "svn up #{PATH_TO_TRUNK_WORKING_COPY.inspect}"
+    sh "svn merge -c #{revision} . #{PATH_TO_TRUNK_WORKING_COPY.inspect}"
+  end
+
+  def self.marked_for_addition?(line)
+    line.split(' ').first == "?"
+  end
+
+  def self.marked_for_deletion?(line)
+    line.split(' ').first == "!"
+  end
+
+  def self.conflicts?(line)
+    line.split(' ').first == "C"
+  end
+
+  def self.conflict_file?(line)
+    line =~ /\.r\d+$/ || line =~ /\.mine$/
+  end
 end

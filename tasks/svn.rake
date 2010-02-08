@@ -9,14 +9,14 @@ namespace :svn do
     output = %x[svn up #{ENV['SVN_IGNORE_EXTERNALS']}]
     puts output
     output.each do |line|
-      raise "SVN conflict detected. Please resolve conflicts before proceeding." if conflicts?(line)
+      raise "SVN conflict detected. Please resolve conflicts before proceeding." if SvnHelper.conflicts?(line)
     end
   end
 
   desc "add new files to svn"
   task :add do
     %x[svn st].split("\n").each do |line|
-      if marked_for_addition?(line) && !svn_conflict_file?(line)
+      if SvnHelper.marked_for_addition?(line) && !SvnHelper.conflict_file?(line)
         file = line.split(' ').last
         %x[svn add #{file.inspect}]
         puts %[added #{file.inspect}]
@@ -32,7 +32,7 @@ namespace :svn do
   desc "remove deleted files from svn"
   task :delete do
     %x[svn st].split("\n").each do |line|
-      if marked_for_deletion?(line)
+      if SvnHelper.marked_for_deletion?(line)
         file = line.split(' ').last
         %x[svn up #{file.inspect} && svn rm #{file.inspect}]
         puts %[removed #{file.inspect}]
@@ -45,32 +45,10 @@ namespace :svn do
   task :revert_all do
     system "svn revert -R ."
     %x[svn st].split("\n").each do |line|
-      next unless marked_for_addition?(line)
+      next unless SvnHelper.marked_for_addition?(line)
       filename = line.split(' ').last
       rm_r filename
       puts "removed #{filename.inspect}"
     end
-  end
-
-  def merge_to_trunk(revision)
-    puts "Merging changes into trunk. Don't forget to check these in."
-    sh "svn up #{PATH_TO_TRUNK_WORKING_COPY.inspect}"
-    sh "svn merge -c #{revision} . #{PATH_TO_TRUNK_WORKING_COPY.inspect}"
-  end
-
-  def marked_for_addition?(line)
-    line.split(' ').first == "?"
-  end
-
-  def marked_for_deletion?(line)
-    line.split(' ').first == "!"
-  end
-
-  def conflicts?(line)
-    line.split(' ').first == "C"
-  end
-
-  def svn_conflict_file?(line)
-    line =~ /\.r\d+$/ || line =~ /\.mine$/
   end
 end
