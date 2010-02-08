@@ -1,75 +1,67 @@
-require 'rexml/document'
-
 require File.expand_path(File.dirname(__FILE__) + '/../lib/commit_message')
-require File.expand_path(File.dirname(__FILE__) + '/../lib/prompt_line')
-require File.expand_path(File.dirname(__FILE__) + '/../lib/cruise_status')
+require File.expand_path(File.dirname(__FILE__) + '/../lib/scm_helper')
 
-def git?
-  `git symbolic-ref HEAD 2>/dev/null`
-  $?.success?
-end
+# To use this library, you will need to define a rake task called 'pc'. All steps that are needed before and after 'pc' are implemented here.
+namespace :scm do
+  namespace :git do
+    desc "Run steps that are needed before running tests"
+    task :track_and_update => ['git:st', 'git:reset_soft', "giternal:update", 'git:add', 'git:st']
 
-if git?
-  desc "Run to check in"
-  task :commit => ['git:reset_soft', 'git:add', 'git:st'] do
-    commit_message = CommitMessage.new
-    sh_with_output("git config user.name #{commit_message.pair.inspect}")
-    message = "#{commit_message.feature} - #{commit_message.message}"
-    sh_with_output("git commit -m #{message.inspect}")
-    Rake::Task['git:pull_rebase'].invoke
-    Rake::Task[:default].invoke
-    if ok_to_check_in?
-      Rake::Task['git:push'].invoke
-    end
-  end
-else
-  desc "Run before checking in"
-  task :pc => ['svn:add', 'svn:delete', 'svn:up', :default]
+    desc "Run to check in"
+    task :ci do
+      if GitHelper.files_to_check_in?
+        if ScmHelper.ok_to_check_in?
+          commit_message = CommitMessage.new
+          ScmHelper.sh_with_output("git config user.name #{commit_message.pair.inspect}")
+          message = commit_message.joined_message
+          ScmHelper.sh_with_output("git commit -m #{message.inspect}")  # local commit
 
-  desc "Run to check in"
-  task :commit => "svn:st" do
-    if files_to_check_in?
-      message = CommitMessage.new.joined_message
-      Rake::Task[:pc].invoke
-
-      if ok_to_check_in?
-        output = sh_with_output "#{commit_command(message)}"
-        revision = output.match(/Committed revision (\d+)\./)[1]
-        merge_to_trunk(revision) if `svn info`.include?("branches") && self.class.const_defined?(:PATH_TO_TRUNK_WORKING_COPY)
+          Rake::Task['git:pull_rebase'].invoke
+          Rake::Task['git:push'].invoke   # remote push
+        end
+      else
+        puts "Nothing to commit" 
       end
-    else
-      puts "Nothing to commit"
     end
   end
 
-  def commit_command(message)
-  "svn ci -m #{message.inspect}"
+  namespace :svn do
+    desc "Run steps that are needed before running tests"
+    task :track_and_update => ['svn:st', 'svn:delete', 'svn:add', 'svn:up']
+
+    desc "Run to check in"
+    task :ci do
+      if SvnHelper.files_to_check_in?
+        if ScmHelper.ok_to_check_in?
+          message = CommitMessage.new.joined_message
+          commit_command = "svn ci -m #{message.inspect}"
+          output = ScmHelper.sh_with_output commit_command
+          revision = output.match(/Committed revision (\d+)\./)[1]
+          SvnHelper.merge_to_trunk(revision) if self.class.const_defined?(:PATH_TO_TRUNK_WORKING_COPY) && `svn info`.include?("branches")
+        end
+      else
+        puts "Nothing to commit" 
+      end
+    end
   end
 
-  def files_to_check_in?
-  %x[svn st --ignore-externals].split("\n").reject {|line| line[0,1] == "X"}.any?
+  task :update do
+    if ScmHelper.git?
+      Rake::Task["scm:git:track_and_update"].invoke
+    else
+      Rake::Task["scm:svn:track_and_update"].invoke
+    end
+  end
+
+  task :ci do
+    if ScmHelper.git?
+      Rake::Task["scm:git:ci"].invoke
+    else
+      Rake::Task["scm:svn:ci"].invoke
+    end
   end
 end
 
-def ok_to_check_in?
-  return true unless self.class.const_defined?(:CCRB_RSS)
-  cruise_status = CruiseStatus.new(CCRB_RSS)
-  cruise_status.pass? ? true : are_you_sure?( "Build FAILURES: #{cruise_status.failures.join(', ')}" )
-end
+task :commit => ["scm:update", :pc, "scm:ci"]
 
-def are_you_sure?(message)
-  puts "\n", message
-  input = ""
-  while (input.strip.empty?)
-    input = Readline.readline("Are you sure you want to check in? (y/n): ")
-  end
-  return input.strip.downcase[0,1] == "y"
-end
-
-def sh_with_output(command)
-  puts command
-  output = `#{command}`
-  puts output
-  raise unless $?.success?
-  output
-end
+task :ci => "scm:ci"
