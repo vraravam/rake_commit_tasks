@@ -14,7 +14,7 @@ namespace :scm do
           commit_message = CommitMessage.new
           ScmHelper.sh_with_output("git config user.name #{commit_message.pair.inspect}")
           message = commit_message.joined_message
-          ScmHelper.sh_with_output("git commit -m #{message.inspect}")  # local commit
+          ScmHelper.sh_with_output("git commit -am #{message.inspect}")  # local commit
 
           Rake::Task['git:pull_rebase'].invoke
           Rake::Task['git:push'].invoke   # remote push
@@ -62,6 +62,6 @@ namespace :scm do
   end
 end
 
-task :commit => ["scm:update", :pc, "scm:ci"]
-
+task :pc => "scm:update"
+task :commit => [:pc, "scm:ci"]
 task :ci => "scm:ci"
